@@ -1,5 +1,7 @@
 package com.gabry.beecache.core.registry
 
+import scala.util.Try
+
 /**
  * Created by gabry on 2018/4/17 9:43
  * 节点注册接口
@@ -15,7 +17,7 @@ trait Registry {
   /**
    * 开始连接注册中心
    */
-  def connect(): Unit
+  def connect(): Try[Unit]
 
   /**
    * 断开并重新链接注册中心

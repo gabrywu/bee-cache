@@ -88,27 +88,6 @@ class BeeCacheActor(entityTypeName: String) extends PersistentActor with ActorLo
       cancelableTimeout = reCreateCancelableTimeout(entityData.expireTime)
   }
 
-  /**
-   * actor用persist函数将command序列化保存后，再使用该command对状态进行更新
-   *
-   * @param updateCommand 更新状态的命令
-   */
-  def updateState(updateCommand: EntityCommand, recover: Boolean = false): Unit = {
-    val newEntityData = updateCommand match {
-      case cmd: EntityCommand.Set => BeeCacheData(cmd.key, Some(cmd.value), cmd.expireTime, lastSequenceNr)
-      case cmd: EntityCommand.SetExpire => entityData.copy(expireTime = cmd.expireTime, version = lastSequenceNr)
-      case _: EntityCommand.Delete => defaultEntityData
-    }
-    entityData = newEntityData
-    if (!recover) {
-      reCreateCancelableTimeout(entityData.expireTime)
-    }
-
-    if (lastSequenceNr % snapshotMaxMessage == 0 && lastSequenceNr != 0) {
-      saveSnapshot(entityData)
-    }
-  }
-
   override def receiveCommand: Receive = receiveControlCommand orElse receiveEntityMessage
 
   /**
@@ -133,6 +112,27 @@ class BeeCacheActor(entityTypeName: String) extends PersistentActor with ActorLo
       sender() ! EntityEvent.Selected(entityData.key, Right(entityData))
     case EntityCommand.Select(key) if entityData.value.isEmpty =>
       sender() ! EntityEvent.Selected(entityData.key, Left(EntityException.KeyNotFound(key, s"Key[$key] not found ,you can set it first")))
+  }
+
+  /**
+   * actor用persist函数将command序列化保存后，再使用该command对状态进行更新
+   *
+   * @param updateCommand 更新状态的命令
+   */
+  def updateState(updateCommand: EntityCommand, recover: Boolean = false): Unit = {
+    val newEntityData = updateCommand match {
+      case cmd: EntityCommand.Set => BeeCacheData(cmd.key, Some(cmd.value), cmd.expireTime, lastSequenceNr)
+      case cmd: EntityCommand.SetExpire => entityData.copy(expireTime = cmd.expireTime, version = lastSequenceNr)
+      case _: EntityCommand.Delete => defaultEntityData
+    }
+    entityData = newEntityData
+    if (!recover) {
+      reCreateCancelableTimeout(entityData.expireTime)
+    }
+
+    if (lastSequenceNr % snapshotMaxMessage == 0 && lastSequenceNr != 0) {
+      saveSnapshot(entityData)
+    }
   }
 
   def receiveControlCommand: Receive = {

@@ -14,7 +14,7 @@ import org.slf4j.LoggerFactory
 
 import java.util.Optional
 import scala.concurrent.duration.DurationInt
-import scala.util.Random
+import scala.util.{Failure, Random, Success}
 
 /**
  * Created by gabry on 2018/7/3 14:20
@@ -26,33 +26,38 @@ object BeeCacheBenchmark {
     val parallel = args.headOption.map(_.toInt).getOrElse(10)
     val msgNumberPerParallel = if (args.length > 1) args(1).toInt else 10000
     val config = ConfigFactory.load()
-    val clusterName: String = config.getString("clusterNode.cluster-name")
+    val clusterName: String = config.getString("cluster.name")
     val shardingRole: String = config.getString("akka.cluster.sharding.role")
     val numberOfShards = config.getInt("server.number-of-shards")
-    val system = ActorSystem(clusterName, config)
     val registry = RegistryFactory.getRegistryOrDefault(config)
-    try {
-      registry.connect()
-      val seeds = registry.getNodesByType("seed").map(node => ActorPath.fromString(node.anchor).address).toList
-      if (seeds.nonEmpty) {
-        val cluster = Cluster(system)
-        cluster.joinSeedNodes(seeds)
-      }
-      val data = putData(config)
-      val beeCacheRegion = ClusterSharding(system).startProxy(
-        typeName = Constants.ENTITY_TYPE_NAME,
-        role = Optional.of(shardingRole),
-        messageExtractor = BeeCacheMessageExtractor(numberOfShards))
+    registry.connect() match {
+      case Success(_) =>
+        val seeds = registry.getNodesByType("seed").map(node => ActorPath.fromString(node.anchor).address)
+        if (seeds.nonEmpty) {
+          val system = ActorSystem(clusterName, config)
+          val cluster = Cluster(system)
+          cluster.joinSeedNodes(seeds)
+          val data = putData(config)
+          val beeCacheRegion = ClusterSharding(system).startProxy(
+            typeName = Constants.ENTITY_TYPE_NAME,
+            role = Optional.of(shardingRole),
+            messageExtractor = BeeCacheMessageExtractor(numberOfShards))
 
-      beeCacheRegion ! EntityCommand.Get(data.key)
+          beeCacheRegion ! EntityCommand.Get(data.key)
 
-      Thread.sleep(3 * 1000)
-      val mark = system.actorOf(Props(new BenchmarkActor(beeCacheRegion, config, parallel, msgNumberPerParallel)))
-    } catch {
-      case exception: Exception =>
-        log.error(s"Cannot connect to Registry: $exception")
-    } finally {
-      registry.disConnect()
+          Thread.sleep(3 * 1000)
+          val mark = system.actorOf(Props(new BenchmarkActor(beeCacheRegion, config, parallel, msgNumberPerParallel)))
+          println(s"launch benchmark actor at ${mark}")
+          system.registerOnTermination {
+            registry.disConnect()
+          }
+        } else {
+          println("no cluster found")
+          registry.disConnect()
+        }
+      case Failure(exception) =>
+        log.error(s"Cannot connect to Registry: ${exception.getMessage}", exception)
+
     }
   }
 

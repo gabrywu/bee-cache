@@ -2,6 +2,8 @@ package com.gabry.beecache.core.registry
 
 import com.typesafe.config.Config
 
+import scala.util.Try
+
 /**
  * Created by gabry on 2018/7/3 9:13
  */
@@ -20,7 +22,7 @@ class DefaultRegistry(config: Config) extends AbstractRegistry(config) {
   /**
    * 开始连接注册中心
    */
-  override def connect(): Unit = {}
+  override def connect(): Try[Unit] = Try {}
 
   /**
    * 断开并重新链接注册中心

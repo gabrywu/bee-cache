@@ -1,6 +1,6 @@
 package com.gabry.beecache.client
 
-import akka.actor.{ActorPath, ActorRef, ActorSystem}
+import akka.actor.{ActorPath, ActorRef, ActorSystem, Address}
 import akka.cluster.Cluster
 import akka.cluster.sharding.ClusterSharding
 import akka.pattern._
@@ -28,7 +28,7 @@ class BeeCacheClient(config: Config) extends AbstractBeeCacheClient(config) {
   import scala.concurrent.ExecutionContext.Implicits.global
 
   private val log = LoggerFactory.getLogger(classOf[BeeCacheClient])
-  private val clusterName: String = config.getString("clusterNode.cluster-name")
+  private val clusterName: String = config.getString("cluster.name")
   private implicit val defaultTimeout: Timeout = Timeout(config.getDuration("client.request-time-out").toMillis, TimeUnit.MILLISECONDS)
   private val shardingRole: String = config.getString("akka.cluster.sharding.role")
   private val numberOfShards = config.getInt("server.number-of-shards")
@@ -42,31 +42,33 @@ class BeeCacheClient(config: Config) extends AbstractBeeCacheClient(config) {
     log.info("Initializing")
     system = ActorSystem(clusterName, config)
     val registry = RegistryFactory.getRegistryOrDefault(config)
-    try {
+    val seeds = try {
       registry.connect()
-      val seeds = registry.getNodesByType("seed").map(node => ActorPath.fromString(node.anchor).address).toList
-      if (seeds.nonEmpty) {
-        val cluster = Cluster(system)
-        cluster.joinSeedNodes(seeds)
-      }
-      beeCacheRegion = ClusterSharding(system).startProxy(
-        typeName = Constants.ENTITY_TYPE_NAME
-        , role = Optional.of(shardingRole)
-        , messageExtractor = BeeCacheMessageExtractor(numberOfShards))
+      registry.getNodesByType("seed").map(node => ActorPath.fromString(node.anchor).address)
     } catch {
       case exception: Exception =>
-        log.error(s"Cannot connect to Registry: $exception")
-    } finally {
+        log.error("Cannot connect to registry {}", exception.getMessage, exception)
+        registry.disConnect()
+        Array.empty[Address]
+    }
+
+    if (seeds.nonEmpty) {
+      val cluster = Cluster(system)
+      cluster.joinSeedNodes(seeds)
+    }
+    beeCacheRegion = ClusterSharding(system).startProxy(
+      typeName = Constants.ENTITY_TYPE_NAME
+      , role = Optional.of(shardingRole)
+      , messageExtractor = BeeCacheMessageExtractor(numberOfShards))
+    system.registerOnTermination {
       registry.disConnect()
     }
-    log.info("Initialized")
   }
 
   /**
    * 断开server链接
    */
   override def destroy(): Unit = {
-    log.warn("Destroying")
     val cluster = Cluster(system)
     cluster.leave(cluster.selfAddress)
     system.stop(beeCacheRegion)

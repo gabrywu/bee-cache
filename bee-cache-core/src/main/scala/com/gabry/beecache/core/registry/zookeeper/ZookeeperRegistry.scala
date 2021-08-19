@@ -7,11 +7,11 @@ import org.apache.curator.framework.{CuratorFramework, CuratorFrameworkFactory}
 import org.apache.curator.retry.ExponentialBackoffRetry
 import org.apache.curator.utils.ZKPaths
 import org.apache.zookeeper.CreateMode
-import org.apache.zookeeper.KeeperException.NodeExistsException
 import org.apache.zookeeper.data.Stat
 
 import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
+import scala.util.Try
 
 
 object ZookeeperRegistry {
@@ -47,23 +47,21 @@ class ZookeeperRegistry(config: Config) extends AbstractRegistry(config) {
   /**
    * 开始连接注册中心
    */
-  override def connect(): Unit = {
+  override def connect(): Try[Unit] = Try {
     if (!isConnected) {
       zkClient = CuratorFrameworkFactory.newClient(hosts, new ExponentialBackoffRetry(baseSleepTimeMs, maxRetries))
       zkClient.start()
-      zkClient.blockUntilConnected(baseSleepTimeMs, TimeUnit.SECONDS)
-      checkRootNode()
+      if (zkClient.blockUntilConnected(baseSleepTimeMs, TimeUnit.SECONDS)) {
+        checkRootNode()
+      }
     }
   }
 
-  private def checkRootNode(): Unit = {
+  private def checkRootNode(): Try[Unit] = Try {
     val nodeCheck = zkClient.checkExists().forPath(s"$rootPath")
     if (nodeCheck == null) {
-      try {
-        zkClient.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT).forPath(s"$rootPath", "".getBytes)
-      } catch {
-        case _: NodeExistsException =>
-      }
+      zkClient.create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT).forPath(s"$rootPath", "".getBytes)
+
     }
   }
 
