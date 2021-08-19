@@ -29,7 +29,8 @@ class BeeCacheClient(config: Config) extends AbstractBeeCacheClient(config) {
 
   private val log = LoggerFactory.getLogger(classOf[BeeCacheClient])
   private val clusterName: String = config.getString("cluster.name")
-  private implicit val defaultTimeout: Timeout = Timeout(config.getDuration("client.request-time-out").toMillis, TimeUnit.MILLISECONDS)
+  private implicit val defaultTimeout: Timeout = Timeout(config.getDuration("client.request-time-out").toMillis
+    , TimeUnit.MILLISECONDS)
   private val shardingRole: String = config.getString("akka.cluster.sharding.role")
   private val numberOfShards = config.getInt("server.number-of-shards")
   private var system: ActorSystem = _

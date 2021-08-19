@@ -32,7 +32,7 @@ object BeeCacheBenchmark {
     val registry = RegistryFactory.getRegistryOrDefault(config)
     registry.connect() match {
       case Success(_) =>
-        val seeds = registry.getNodesByType("seed").map(node => ActorPath.fromString(node.anchor).address)
+        val seeds = registry.getNodesByType(Constants.ROLE_SEED_NAME).map(node => ActorPath.fromString(node.anchor).address)
         if (seeds.nonEmpty) {
           val system = ActorSystem(clusterName, config)
           val cluster = Cluster(system)
